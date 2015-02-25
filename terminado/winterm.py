@@ -21,8 +21,8 @@ class PseudoPseudoTerminal(object):
     @classmethod
     def spawn(cls, argv, env, cwd):
         assert argv[0] == 'bash'
-        argv[0] = "C:\\Program Files (x86)\\Git\\bin\\bash.exe"
-        return cls(Popen(argv, env=env, cwd=cwd,
+        argv[:1] = ["C:\\Program Files (x86)\\Git\\bin\\bash.exe", '--login', '-i']
+        return cls(Popen(argv, env=env, cwd=cwd, bufsize=0,
                 stdin=PIPE, stdout=PIPE, stderr=STDOUT))
 
     @property
@@ -36,7 +36,7 @@ class PseudoPseudoTerminal(object):
         b = self.queue.get()
         if b == b'':
             raise EOFError
-        return self.decoder.decode(b, final=False)
+        return self.decoder.decode(b, final=False).replace(u'\n', u'\r\n')
 
     def start_read_thread(self, callback):
         def output_to_queue():
@@ -48,6 +48,6 @@ class PseudoPseudoTerminal(object):
                     # The pipe was closed, we can stop trying to read it
                     break
 
-        self._read_thread = threading.Thread(output_to_queue)
+        self._read_thread = threading.Thread(target=output_to_queue)
         self._read_thread.daemon = True
         self._read_thread.start()
