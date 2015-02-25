@@ -15,7 +15,10 @@ import logging
 import os
 import signal
 
-from ptyprocess import PtyProcessUnicode
+if sys.platform == 'win32':
+    from .winterm import PseudoPseudoTerminal as PtyProcessUnicode
+else:
+    from ptyprocess import PtyProcessUnicode
 from tornado import gen
 from tornado.ioloop import IOLoop
 
@@ -39,6 +42,10 @@ class PtyWithClients(object):
         terminal trying to use more than the available space, so we keep it 
         sized to the smallest client.
         """
+        if sys.platform == 'win32':
+            # Not sure how to resize terminal on Windows, or even if we can.
+            return
+
         minrows = mincols = 10001
         for client in self.clients:
             rows, cols = client.size
@@ -165,7 +172,10 @@ class TermManagerBase(object):
         """Connect a terminal to the tornado event loop to read data from it."""
         fd = ptywclients.ptyproc.fd
         self.ptys_by_fd[fd] = ptywclients
-        self.ioloop.add_handler(fd, self.pty_read, self.ioloop.READ)
+        if sys.platform == 'win32':
+            ptywclients.ptyproc.start_read_thread(self.pty_read)
+        else:
+            self.ioloop.add_handler(fd, self.pty_read, self.ioloop.READ)
 
     def on_eof(self, ptywclients):
         """Called when the pty has closed.
@@ -174,7 +184,8 @@ class TermManagerBase(object):
         fd = ptywclients.ptyproc.fd
         self.log.info("EOF on FD %d; stopping reading", fd)
         del self.ptys_by_fd[fd]
-        self.ioloop.remove_handler(fd)
+        if sys.platform != 'win32':
+            self.ioloop.remove_handler(fd)
         os.close(fd)
         
         # This should reap the child process
