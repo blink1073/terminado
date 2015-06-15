@@ -41,7 +41,7 @@ class PseudoPseudoTerminal(object):
     def start_read_thread(self, callback):
         def output_to_queue():
             while True:
-                b = self.popen.stdout.read(65536)
+                b = self.popen.stdout.read(1)
                 self.queue.put(b)
                 self.loop.add_callback(callback, self.fd)
                 if b == b'':
