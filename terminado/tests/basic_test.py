@@ -15,6 +15,8 @@ import datetime
 import logging
 import json
 import os
+import re
+
 
 #
 # The timeout we use to assume no more messages are coming
@@ -81,7 +83,11 @@ class TestTermClient(object):
         yield self.read_stdout()                          # Clear out any pending
         self.write_stdin("echo $$\r")
         (stdout, extra) = yield self.read_stdout()
-        pid = int(stdout.split('\n')[1])
+        if os.name == 'nt':
+            match = re.match('(\d+)', stdout.split('\n')[1])
+            pid = int(match.groups()[0])
+        else:
+            pid = int(stdout.split('\n')[1])
         raise tornado.gen.Return(pid)
 
     def close(self):
@@ -162,7 +168,7 @@ class CommonTests(TermTestCase):
             yield tm.read_all_msg()
             tm.write_stdin("whoami\n")
             (stdout, other) = yield tm.read_stdout()
-            assert stdout.startswith('who')
+            assert 'who' in stdout.split(os.linesep)[0]
             assert other == []
             tm.close()
 

@@ -10,14 +10,21 @@ else:
     unicode = str
 
 from collections import deque
+from functools import partial
 import itertools
 import logging
 import os
 import signal
 
-from ptyprocess import PtyProcessUnicode
+try:
+    from ptyprocess import PtyProcessUnicode
+except ImportError:
+    from winpty import PtyProcess as PtyProcessUnicode
+
 from tornado import gen
 from tornado.ioloop import IOLoop
+from tornado import ioloop
+
 
 ENV_PREFIX = "PYXTERM_"         # Environment variable prefix
 
@@ -60,6 +67,8 @@ class PtyWithClients(object):
 
     def killpg(self, sig=signal.SIGTERM):
         """Send a signal to the process group of the process in the pty"""
+        if os.name == 'nt':
+            return self.ptyproc.terminate()
         pgid = os.getpgid(self.ptyproc.pid)
         os.killpg(pgid, sig)
     
@@ -69,7 +78,9 @@ class PtyWithClients(object):
         SIGHUP and SIGINT. If "force" is True then moves onto SIGKILL. This
         returns True if the child was terminated. This returns False if the
         child could not be terminated. '''
-        
+        if os.name == 'nt':
+            raise gen.Return(self.ptyproc.terminate())
+
         loop = IOLoop.current()
         sleep = lambda : gen.Task(loop.add_timeout, loop.time() + self.ptyproc.delayafterterminate)
 
@@ -155,23 +166,37 @@ class TermManagerBase(object):
         argv = options['shell_command']
         env = self.make_term_env(**options)
         pty = PtyProcessUnicode.spawn(argv, env=env, cwd=options.get('cwd', None))
+        # TODO: remove in next pywinpty release
+        if os.name == 'nt':
+            pty.fd = id(pty)
         return PtyWithClients(pty)
 
     def start_reading(self, ptywclients):
         """Connect a terminal to the tornado event loop to read data from it."""
         fd = ptywclients.ptyproc.fd
+
+        if os.name == 'nt':
+            func = partial(self.pty_read, fd)
+            self._fdTimer = ioloop.PeriodicCallback(func, 0.1, io_loop=self.ioloop)
+            self._fdTimer.start()
+        else:
+            self.ioloop.add_handler(fd, self.pty_read, self.ioloop.READ)
+
         self.ptys_by_fd[fd] = ptywclients
-        self.ioloop.add_handler(fd, self.pty_read, self.ioloop.READ)
 
     def on_eof(self, ptywclients):
         """Called when the pty has closed.
         """
         # Stop trying to read from that terminal
         fd = ptywclients.ptyproc.fd
+
+        if os.name == 'nt':
+            self._fdTimer.stop()
+        else:
+            self.ioloop.remove_handler(fd)
+
         self.log.info("EOF on FD %d; stopping reading", fd)
         del self.ptys_by_fd[fd]
-        self.ioloop.remove_handler(fd)
-
         # This closes the fd, and should result in the process being reaped.
         ptywclients.ptyproc.close()
 
@@ -180,9 +205,10 @@ class TermManagerBase(object):
         ptywclients = self.ptys_by_fd[fd]
         try:
             s = ptywclients.ptyproc.read(65536)
-            ptywclients.read_buffer.append(s)
-            for client in ptywclients.clients:
-                client.on_pty_read(s)
+            if s:
+                ptywclients.read_buffer.append(s)
+                for client in ptywclients.clients:
+                    client.on_pty_read(s)
         except EOFError:
             self.on_eof(ptywclients)
             for client in ptywclients.clients:
@@ -258,6 +284,12 @@ class UniqueTermManager(TermManagerBase):
         """Send terminal SIGHUP when client disconnects."""
         self.log.info("Websocket closed, sending SIGHUP to terminal.")
         if websocket.terminal:
+            if os.name == 'nt':
+                websocket.terminal.kill()
+                # Immediately call the fd reader to process
+                # the eof and free up space
+                self.pty_read(websocket.terminal.ptyproc.fd)
+                return
             websocket.terminal.killpg(signal.SIGHUP)
 
 
