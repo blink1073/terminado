@@ -77,7 +77,10 @@ class PtyWithClients(object):
         returns True if the child was terminated. This returns False if the
         child could not be terminated. '''
         if os.name == 'nt':
-            raise gen.Return(self.ptyproc.terminate(force=force))
+            signals = [signal.SIGINT, signal.SIGTERM]
+        else:
+            signals = [signal.SIGHUP, signal.SIGCONT, signal.SIGINT,
+                       signal.SIGTERM]
 
         loop = IOLoop.current()
         sleep = lambda : gen.Task(loop.add_timeout, loop.time() + self.ptyproc.delayafterterminate)
@@ -85,8 +88,7 @@ class PtyWithClients(object):
         if not self.ptyproc.isalive():
             raise gen.Return(True)
         try:
-            for sig in [signal.SIGHUP, signal.SIGCONT, signal.SIGINT,
-                        signal.SIGTERM]:
+            for sig in signals:
                 self.kill(sig)
                 yield sleep()
                 if not self.ptyproc.isalive():
