@@ -23,7 +23,6 @@ except ImportError:
 from tornado import gen
 from tornado.ioloop import IOLoop
 
-
 ENV_PREFIX = "PYXTERM_"         # Environment variable prefix
 
 DEFAULT_TERM_TYPE = "xterm"
@@ -171,17 +170,18 @@ class TermManagerBase(object):
     def start_reading(self, ptywclients):
         """Connect a terminal to the tornado event loop to read data from it."""
         fd = ptywclients.ptyproc.fd
-        self.ioloop.add_handler(fd, self.pty_read, self.ioloop.READ)
         self.ptys_by_fd[fd] = ptywclients
+        self.ioloop.add_handler(fd, self.pty_read, self.ioloop.READ)
 
     def on_eof(self, ptywclients):
         """Called when the pty has closed.
         """
         # Stop trying to read from that terminal
         fd = ptywclients.ptyproc.fd
-        self.ioloop.remove_handler(fd)
         self.log.info("EOF on FD %d; stopping reading", fd)
         del self.ptys_by_fd[fd]
+        self.ioloop.remove_handler(fd)
+
         # This closes the fd, and should result in the process being reaped.
         ptywclients.ptyproc.close()
 
