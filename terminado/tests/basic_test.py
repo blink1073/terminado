@@ -84,7 +84,7 @@ class TestTermClient(object):
         self.write_stdin("echo $$\r")
         (stdout, extra) = yield self.read_stdout()
         if os.name == 'nt':
-            match = re.match('(\d+)', stdout.split('\n')[1])
+            match = re.search(r'echo \$\$\x1b\[0K\r\n(\d+)', stdout)
             pid = int(match.groups()[0])
         else:
             pid = int(stdout.split('\n')[1])
@@ -168,7 +168,10 @@ class CommonTests(TermTestCase):
             yield tm.read_all_msg()
             tm.write_stdin("whoami\n")
             (stdout, other) = yield tm.read_stdout()
-            assert 'who' in stdout.split(os.linesep)[0]
+            if os.name == 'nt':
+                assert 'whoami' in stdout
+            else:
+                assert stdout.startswith('who')
             assert other == []
             tm.close()
 
