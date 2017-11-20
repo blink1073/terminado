@@ -10,7 +10,6 @@ else:
     unicode = str
 
 from collections import deque
-from functools import partial
 import itertools
 import logging
 import os
@@ -23,7 +22,6 @@ except ImportError:
 
 from tornado import gen
 from tornado.ioloop import IOLoop
-from tornado import ioloop
 
 
 ENV_PREFIX = "PYXTERM_"         # Environment variable prefix
