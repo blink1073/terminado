@@ -13,7 +13,6 @@ else:
     byte_code = lambda x: x
     unicode = str
 
-
 from collections import deque
 import itertools
 import logging
