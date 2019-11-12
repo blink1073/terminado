@@ -6,7 +6,14 @@
 
 from __future__ import absolute_import, print_function
 
-import asyncio
+import sys
+if sys.version_info[0] < 3:
+    byte_code = ord
+else:
+    byte_code = lambda x: x
+    unicode = str
+
+
 from collections import deque
 import itertools
 import logging
@@ -88,7 +95,8 @@ class PtyWithClients(object):
         pgid = os.getpgid(self.ptyproc.pid)
         os.killpg(pgid, sig)
 
-    async def terminate(self, force=False):
+    @gen.coroutine
+    def terminate(self, force=False):
         '''This forces a child process to terminate. It starts nicely with
         SIGHUP and SIGINT. If "force" is True then moves onto SIGKILL. This
         returns True if the child was terminated. This returns False if the
@@ -167,11 +175,10 @@ class TermManagerBase(object):
         self.ptys_by_fd = {}
 
         if ioloop is not None:
-            warnings.warn(
-                f"Setting {self.__class__.__name__}.ioloop is deprecated and ignored",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+            self.ioloop = ioloop
+        else:
+            import tornado.ioloop
+            self.ioloop = tornado.ioloop.IOLoop.instance()
 
     def make_term_env(self, height=25, width=80, winheight=0, winwidth=0, **kwargs):
         """Build the environment variables for the process in the terminal."""
@@ -284,8 +291,9 @@ class SingleTermManager(TermManagerBase):
             self.start_reading(self.terminal)
         return self.terminal
 
-    async def kill_all(self):
-        await super().kill_all()
+    @gen.coroutine
+    def kill_all(self):
+        yield super(SingleTermManager, self).kill_all()
         self.terminal = None
 
 
@@ -377,7 +385,7 @@ class NamedTermManager(TermManagerBase):
 
     async def terminate(self, name, force=False):
         term = self.terminals[name]
-        await term.terminate(force=force)
+        yield term.terminate(force=force)
 
     def on_eof(self, ptywclients):
         super(NamedTermManager, self).on_eof(ptywclients)
@@ -385,6 +393,7 @@ class NamedTermManager(TermManagerBase):
         self.log.info("Terminal %s closed", name)
         self.terminals.pop(name, None)
 
-    async def kill_all(self):
-        await super().kill_all()
+    @gen.coroutine
+    def kill_all(self):
+        yield super(NamedTermManager, self).kill_all()
         self.terminals = {}
