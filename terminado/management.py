@@ -13,6 +13,7 @@ else:
     byte_code = lambda x: x
     unicode = str
 
+
 from collections import deque
 import itertools
 import logging
@@ -42,9 +43,9 @@ class PtyWithClients(object):
 
     def resize_to_smallest(self):
         """Set the terminal size to that of the smallest client dimensions.
-        
+
         A terminal not using the full space available is much nicer than a
-        terminal trying to use more than the available space, so we keep it 
+        terminal trying to use more than the available space, so we keep it
         sized to the smallest client.
         """
         minrows = mincols = 10001
@@ -57,7 +58,7 @@ class PtyWithClients(object):
 
         if minrows == 10001 or mincols == 10001:
             return
-        
+
         rows, cols = self.ptyproc.getwinsize()
         if (rows, cols) != (minrows, mincols):
             self.ptyproc.setwinsize(minrows, mincols)
@@ -72,7 +73,7 @@ class PtyWithClients(object):
             return self.ptyproc.kill(sig)
         pgid = os.getpgid(self.ptyproc.pid)
         os.killpg(pgid, sig)
-    
+
     @gen.coroutine
     def terminate(self, force=False):
         '''This forces a child process to terminate. It starts nicely with
@@ -141,7 +142,7 @@ class TermManagerBase(object):
         else:
             import tornado.ioloop
             self.ioloop = tornado.ioloop.IOLoop.instance()
-        
+
     def make_term_env(self, height=25, width=80, winheight=0, winwidth=0, **kwargs):
         """Build the environment variables for the process in the terminal."""
         env = os.environ.copy()
@@ -204,7 +205,7 @@ class TermManagerBase(object):
 
     def get_terminal(self, url_component=None):
         """Override in a subclass to give a terminal to a new websocket connection
-        
+
         The :class:`TermSocket` handler works with zero or one URL components
         (capturing groups in the URL spec regex). If it receives one, it is
         passed as the ``url_component`` parameter; otherwise, this is None.
@@ -241,7 +242,7 @@ class SingleTermManager(TermManagerBase):
             self.terminal = self.new_terminal()
             self.start_reading(self.terminal)
         return self.terminal
-    
+
     @gen.coroutine
     def kill_all(self):
         yield super(SingleTermManager, self).kill_all()
@@ -250,7 +251,7 @@ class SingleTermManager(TermManagerBase):
 class MaxTerminalsReached(Exception):
     def __init__(self, max_terminals):
         self.max_terminals = max_terminals
-    
+
     def __str__(self):
         return "Cannot create more than %d terminals" % self.max_terminals
 
@@ -291,10 +292,10 @@ class NamedTermManager(TermManagerBase):
 
     def get_terminal(self, term_name):
         assert term_name is not None
-        
+
         if term_name in self.terminals:
             return self.terminals[term_name]
-        
+
         if self.max_terminals and len(self.terminals) >= self.max_terminals:
             raise MaxTerminalsReached(self.max_terminals)
 
@@ -331,13 +332,13 @@ class NamedTermManager(TermManagerBase):
     def terminate(self, name, force=False):
         term = self.terminals[name]
         yield term.terminate(force=force)
-    
+
     def on_eof(self, ptywclients):
         super(NamedTermManager, self).on_eof(ptywclients)
         name = ptywclients.term_name
         self.log.info("Terminal %s closed", name)
         self.terminals.pop(name, None)
-    
+
     @gen.coroutine
     def kill_all(self):
         yield super(NamedTermManager, self).kill_all()
